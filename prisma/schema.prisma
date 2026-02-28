@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlatformRoleKey {
+  superadmin
+  superadmin_team
+}
+
+enum OrgRoleKey {
+  org_admin
+  org_manager
+  org_employee
+}
+
+enum PermissionAction {
+  read
+  write
+  update
+  delete
+}
+
+model Platform {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizations Organization[]
+  users         User[]
+  auditLogs AuditLog[]
+
+}
+
+model Organization {
+  id         String   @id @default(cuid())
+  platformId String
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  platform Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  users    User[]
+
+  attendanceRecords AttendanceRecord[]  // ✅ ADD THIS
+  auditLogs AuditLog[]
+
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  // Either platform role or org role
+  key         String   @unique
+  scope       String   // "platform" | "org"
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users            User[]
+  roleModuleAccess RoleModuleAccess[]
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roleModuleAccess   RoleModuleAccess[]
+  userModuleOverrides UserModuleOverride[]
+}
+
+model RoleModuleAccess {
+  id        String   @id @default(cuid())
+  roleId    String
+  moduleId  String
+  read      Boolean  @default(false)
+  write     Boolean  @default(false)
+  update    Boolean  @default(false)
+  delete    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, moduleId])
+}
+
+model UserModuleOverride {
+  id        String   @id @default(cuid())
+  userId    String
+  moduleId  String
+  // Nullable means "no override" for that action
+  read      Boolean?
+  write     Boolean?
+  update    Boolean?
+  delete    Boolean?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+}
+
+model User {
+  id         String   @id @default(cuid())
+  platformId String
+  orgId      String?
+  roleId     String
+
+  fullName   String
+  email      String   @unique
+  password   String
+
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  platform Platform      @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role       Role          @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  overrides  UserModuleOverride[]
+
+  attendanceRecords AttendanceRecord[]  // ✅ ADD THIS
+  auditLogs AuditLog[]
+
+}
+
+
+
+model AttendanceRecord {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String
+  date      DateTime
+  status    String   // "present" | "absent" | "leave"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId, date])
+  @@index([orgId, date])
+}
+
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  platformId String
+  orgId      String?
+  userId     String?
+  roleKey    String?
+  moduleKey  String?
+  action     String?
+  method     String?
+  path       String?
+  statusCode Int?
+  ip         String?
+  userAgent  String?
+  durationMs Int?
+  createdAt  DateTime @default(now())
+
+  platform     Platform      @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([platformId])
+  @@index([orgId])
+  @@index([userId])
+  @@index([moduleKey, action])
+}

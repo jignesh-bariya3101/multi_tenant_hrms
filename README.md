@@ -123,7 +123,7 @@ curl -X PUT http://localhost:3000/api/admin/users/<USER_ID>/module-overrides \
 ```
 
 ## Unit tests (RBAC)
-Run:
+Run::
 ```bash
 npm test
 ```
